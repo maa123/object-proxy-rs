@@ -20,7 +20,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/target
-        key: ${{ runner.os }}-rust-${{ hashFiles('cargo.toml') }}
+        key: ${{ runner.os }}-rust-${{ hashFiles('Cargo.toml') }}
         restore-keys: |
           ${{ runner.os }}-rust-
           ${{ runner.os }}-
