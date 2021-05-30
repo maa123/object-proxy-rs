@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Cache Gradle packages
+      uses: actions/cache@v2
+      with:
+        path: ~/target
+        key: ${{ runner.os }}-rust-${{ hashFiles('cargo.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-rust-
+          ${{ runner.os }}-
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
