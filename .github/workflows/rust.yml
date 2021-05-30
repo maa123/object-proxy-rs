@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Cache Gradle packages
+    - name: Cache Cargo
       uses: actions/cache@v2
       with:
         path: ~/target
