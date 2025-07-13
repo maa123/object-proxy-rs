@@ -107,8 +107,10 @@ fn parse_bucket_config(cfg: HashMap<String, Value>) -> Storage {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let mut settings = config::Config::default();
-    settings.merge(config::File::with_name("config")).unwrap();
+    let settings = config::Config::builder()
+        .add_source(config::File::with_name("config"))
+        .build()
+        .unwrap();
     let config_bucket_list = settings.get_array("bucket").unwrap_or(Vec::new());
     let mut bucket_list: Vec<Bucket> = Vec::with_capacity(config_bucket_list.capacity());
     for bucket in config_bucket_list {
@@ -133,20 +135,20 @@ async fn main() -> std::io::Result<()> {
     });
     let http_server = HttpServer::new(move || {
         App::new()
-            .data(bucket_state.clone())
+            .app_data(web::Data::new(bucket_state.clone()))
             .service(ok)
             .default_service(web::get().to(object_req))
     })
     .bind(
         settings
-            .get_str("host")
+            .get_string("host")
             .unwrap_or("127.0.0.1:8080".to_string()),
     )?
     .run();
     println!(
         "Start: {}",
         settings
-            .get_str("host")
+            .get_string("host")
             .unwrap_or("127.0.0.1:8080".to_string())
     );
     http_server.await
