@@ -9,9 +9,13 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 14
   - package-ecosystem: "github-actions"
     # Workflow files stored in the default location of `.github/workflows`
     # You don't need to specify `/.github/workflows` for `directory`. You can use `directory: "/"`.
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 14
