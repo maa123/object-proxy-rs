@@ -87,11 +87,11 @@ async fn main() -> std::io::Result<()> {
     let config_bucket_list = settings.get_array("bucket").unwrap_or(Vec::new());
     let mut bucket_list: Vec<Bucket> = Vec::with_capacity(config_bucket_list.capacity());
     
-    for (index, bucket) in config_bucket_list.into_iter().enumerate() {
+    for (bucket_index, bucket) in config_bucket_list.into_iter().enumerate() {
         let t = match bucket.into_table() {
             Ok(table) => table,
             Err(e) => {
-                eprintln!("Failed to parse bucket configuration at index {}: {}", index, e);
+                eprintln!("Failed to parse bucket configuration at index {}: {}", bucket_index, e);
                 std::process::exit(1);
             }
         };
