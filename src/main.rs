@@ -74,15 +74,27 @@ fn convert_config_map(cfg: HashMap<String, Value>) -> HashMap<String, String> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let settings = config::Config::builder()
+    let settings = match config::Config::builder()
         .add_source(config::File::with_name("config"))
         .build()
-        .unwrap();
+    {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
     let config_bucket_list = settings.get_array("bucket").unwrap_or(Vec::new());
     let mut bucket_list: Vec<Bucket> = Vec::with_capacity(config_bucket_list.capacity());
     
-    for bucket in config_bucket_list {
-        let t = bucket.into_table().unwrap();
+    for (bucket_index, bucket) in config_bucket_list.into_iter().enumerate() {
+        let t = match bucket.into_table() {
+            Ok(table) => table,
+            Err(e) => {
+                eprintln!("Failed to parse bucket configuration at index {}: {}", bucket_index, e);
+                std::process::exit(1);
+            }
+        };
         let bucket_name = t
             .get("bucket")
             .unwrap_or(&Value::from("bucket"))
@@ -106,11 +118,13 @@ async fn main() -> std::io::Result<()> {
         
         builder = builder.bucket(bucket_name.as_str());
         
-        let operator = Operator::new(builder)
-            .unwrap_or_else(|e| {
-                panic!("Failed to create S3 operator for bucket '{}': {}", bucket_name, e)
-            })
-            .finish();
+        let operator = match Operator::new(builder) {
+            Ok(op) => op.finish(),
+            Err(e) => {
+                eprintln!("Failed to create S3 operator for bucket '{}': {}", bucket_name, e);
+                std::process::exit(1);
+            }
+        };
         
         bucket_list.push(Bucket {
             operator,
