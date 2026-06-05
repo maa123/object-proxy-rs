@@ -45,7 +45,7 @@ async fn object_req(req: HttpRequest, data: web::Data<Arc<AppBucketList>>) -> im
         .body("Not Found")
 }
 
-fn transform_config_to_opendal(cfg: HashMap<String, Value>) -> HashMap<String, String> {
+fn convert_config_map(cfg: HashMap<String, Value>) -> HashMap<String, String> {
     let mut config = HashMap::new();
     
     if let Some(access_key) = cfg.get("access-key") {
@@ -87,7 +87,7 @@ async fn main() -> std::io::Result<()> {
             .get("bucket")
             .unwrap_or(&Value::from("bucket"))
             .to_string();
-        let config = transform_config_to_opendal(t);
+        let config = convert_config_map(t);
         
         let mut builder = opendal::services::S3::default();
         
