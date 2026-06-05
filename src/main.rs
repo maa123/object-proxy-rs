@@ -45,7 +45,7 @@ async fn object_req(req: HttpRequest, data: web::Data<Arc<AppBucketList>>) -> im
         .body("Not Found")
 }
 
-fn parse_bucket_config(cfg: HashMap<String, Value>) -> HashMap<String, String> {
+fn transform_config_to_opendal(cfg: HashMap<String, Value>) -> HashMap<String, String> {
     let mut config = HashMap::new();
     
     if let Some(access_key) = cfg.get("access-key") {
@@ -87,7 +87,7 @@ async fn main() -> std::io::Result<()> {
             .get("bucket")
             .unwrap_or(&Value::from("bucket"))
             .to_string();
-        let config = parse_bucket_config(t);
+        let config = transform_config_to_opendal(t);
         
         let mut builder = opendal::services::S3::default();
         
@@ -107,7 +107,9 @@ async fn main() -> std::io::Result<()> {
         builder = builder.bucket(bucket_name.as_str());
         
         let operator = Operator::new(builder)
-            .expect("Failed to create S3 operator")
+            .unwrap_or_else(|e| {
+                panic!("Failed to create S3 operator for bucket '{}': {}", bucket_name, e)
+            })
             .finish();
         
         bucket_list.push(Bucket {
