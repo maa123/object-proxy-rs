@@ -11,7 +11,6 @@ actix-web = "4.11.0"
 
 config = "0.15.13"
 
-rusoto_s3 = "0.48.0"
-rusoto_core = "0.48.0"
+opendal = { version = "0.57.0", features = ["services-s3"] }
 
 tokio = { version = "1.46.1", features = ["io-util"] }

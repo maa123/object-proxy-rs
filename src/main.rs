@@ -3,27 +3,11 @@ use std::sync::Arc;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 
-use rusoto_core::{credential::StaticProvider, Region};
-use rusoto_s3::{GetObjectRequest, S3Client, S3};
-
+use opendal::Operator;
 use config::Value;
 
-use tokio::io;
-
-struct Storage {
-    region: Region,
-    credential: Credential,
-    bucket: String,
-}
-
-struct Credential {
-    key: String,
-    secret: String,
-}
-
 struct Bucket {
-    client: S3Client,
-    name: String,
+    operator: Operator,
 }
 
 struct AppBucketList {
@@ -36,17 +20,14 @@ async fn ok() -> impl Responder {
 }
 
 async fn get_object(bucket: &Bucket, key: &str) -> Option<Vec<u8>> {
-    let mut req = GetObjectRequest::default();
-    req.bucket = bucket.name.to_string();
-    req.key = key.to_string();
-    req.key.remove(0);
-    if let Ok(mut obj) = bucket.client.get_object(req).await {
-        if let Some(streaming) = obj.body.take() {
-            let mut buf: Vec<u8> = vec![];
-            let mut body = streaming.into_async_read();
-            io::copy(&mut body, &mut buf).await.unwrap();
-            return Some(buf);
-        }
+    let key = if key.starts_with('/') {
+        &key[1..]
+    } else {
+        key
+    };
+    
+    if let Ok(data) = bucket.operator.read(key).await {
+        return Some(data.to_vec());
     }
     None
 }
@@ -64,45 +45,31 @@ async fn object_req(req: HttpRequest, data: web::Data<Arc<AppBucketList>>) -> im
         .body("Not Found")
 }
 
-fn parse_bucket_config_credentials(cfg: &HashMap<String, Value>) -> Credential {
-    Credential {
-        key: cfg
-            .get("access-key")
-            .unwrap_or(&Value::from(""))
-            .to_string(),
-        secret: cfg
-            .get("secret-key")
-            .unwrap_or(&Value::from(""))
-            .to_string(),
+fn convert_config_map(cfg: HashMap<String, Value>) -> HashMap<String, String> {
+    let mut config = HashMap::new();
+    
+    if let Some(access_key) = cfg.get("access-key") {
+        config.insert("access_key_id".to_string(), access_key.to_string());
     }
-}
-
-fn parse_bucket_config_region(cfg: &HashMap<String, Value>) -> Region {
-    if cfg.contains_key("endpoint") {
-        return Region::Custom {
-            name: cfg
-                .get("region")
-                .unwrap_or(&Value::from("us-east-1"))
-                .to_string(),
-            endpoint: cfg.get("endpoint").unwrap_or(&Value::from("")).to_string(),
-        };
+    
+    if let Some(secret_key) = cfg.get("secret-key") {
+        config.insert("secret_access_key".to_string(), secret_key.to_string());
     }
-    cfg.get("region")
-        .unwrap_or(&Value::from("us-east-1"))
-        .to_string()
-        .parse()
-        .unwrap_or(Region::UsEast1)
-}
-
-fn parse_bucket_config(cfg: HashMap<String, Value>) -> Storage {
-    Storage {
-        region: parse_bucket_config_region(&cfg),
-        credential: parse_bucket_config_credentials(&cfg),
-        bucket: cfg
-            .get("bucket")
-            .unwrap_or(&Value::from("bucket"))
-            .to_string(),
+    
+    if let Some(endpoint) = cfg.get("endpoint") {
+        let endpoint_str = endpoint.to_string();
+        if !endpoint_str.is_empty() {
+            config.insert("endpoint".to_string(), endpoint_str);
+        }
     }
+    
+    if let Some(region) = cfg.get("region") {
+        config.insert("region".to_string(), region.to_string());
+    } else {
+        config.insert("region".to_string(), "us-east-1".to_string());
+    }
+    
+    config
 }
 
 #[actix_web::main]
@@ -113,23 +80,43 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
     let config_bucket_list = settings.get_array("bucket").unwrap_or(Vec::new());
     let mut bucket_list: Vec<Bucket> = Vec::with_capacity(config_bucket_list.capacity());
+    
     for bucket in config_bucket_list {
         let t = bucket.into_table().unwrap();
-        let storage = parse_bucket_config(t);
-        let provider = StaticProvider::new_minimal(
-            storage.credential.key.to_string(),
-            storage.credential.secret.to_string(),
-        );
-        let client = S3Client::new_with(
-            rusoto_core::request::HttpClient::new().unwrap(),
-            provider,
-            storage.region,
-        );
+        let bucket_name = t
+            .get("bucket")
+            .unwrap_or(&Value::from("bucket"))
+            .to_string();
+        let config = convert_config_map(t);
+        
+        let mut builder = opendal::services::S3::default();
+        
+        if let Some(access_key) = config.get("access_key_id") {
+            builder = builder.access_key_id(access_key);
+        }
+        if let Some(secret_key) = config.get("secret_access_key") {
+            builder = builder.secret_access_key(secret_key);
+        }
+        if let Some(region) = config.get("region") {
+            builder = builder.region(region);
+        }
+        if let Some(endpoint) = config.get("endpoint") {
+            builder = builder.endpoint(endpoint);
+        }
+        
+        builder = builder.bucket(bucket_name.as_str());
+        
+        let operator = Operator::new(builder)
+            .unwrap_or_else(|e| {
+                panic!("Failed to create S3 operator for bucket '{}': {}", bucket_name, e)
+            })
+            .finish();
+        
         bucket_list.push(Bucket {
-            client,
-            name: storage.bucket,
+            operator,
         });
     }
+    
     let bucket_state = Arc::new(AppBucketList {
         buckets: bucket_list,
     });
