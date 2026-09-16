@@ -119,7 +119,7 @@ async fn main() -> std::io::Result<()> {
         builder = builder.bucket(bucket_name.as_str());
         
         let operator = match Operator::new(builder) {
-            Ok(op) => op.finish(),
+            Ok(op) => op,
             Err(e) => {
                 eprintln!("Failed to create S3 operator for bucket '{}': {}", bucket_name, e);
                 std::process::exit(1);
